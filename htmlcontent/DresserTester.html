@@ -1,0 +1,975 @@
+<html style="background-color: transparent;">
+
+        <head>
+        <script src="https://code.jquery.com/jquery-1.7.2.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.2"></script>
+        <script src="https://cdn.jsdelivr.net/gh/kaviyarasu1987/rn-dresser/tsupdate.js"></script>
+        <style type="text/css">
+        .LockOn {
+    display: none;
+    visibility: visible;
+    position: absolute;
+    z-index: 999;
+    top: 0px;
+    left: 0px;
+    width: 105%;
+    height: 105%;
+    background-color:white;
+    vertical-align:bottom;
+    padding-top: 20%; 
+    filter: alpha(opacity=75); 
+    opacity: 0.75; 
+    font-size:large;
+    color:blue;
+    font-style:italic;
+    font-weight:400;
+    background-image: url("https://cdn.jsdelivr.net/gh/kaviyarasu1987/rn-dresser/img_nature.gif");
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-position: center;
+}
+    </style>
+        </head>
+        
+        <body style="background-color: transparent;">
+        
+        <div id="coverScreen"  class="LockOn">
+</div>
+                <canvas id="canvas" style='border: 1px solid black; background-color: transparent;'></canvas>
+              
+               
+               
+               
+        
+            <script>
+                (function() {
+
+                    var rubberIndex=1;
+                    var thickness=5;
+                    var floodFillPoints;
+                    var imageBackup;
+                    var imageForBody;
+                    var magicPoints = [];
+                    var imageHistory = [];
+                    var rubberPoints = [];
+                    var rubberPointsOverall = []; 
+                    var isinitial = true;
+                    var lastPrediction;
+                    MagicWand = (function () {
+                        var lib = {};
+                    
+                        
+                        lib.floodFill = function(image, px, py, colorThreshold, mask, includeBorders) {
+                            return includeBorders
+                                ? floodFillWithBorders(image, px, py, colorThreshold, mask)
+                                : floodFillWithoutBorders(image, px, py, colorThreshold, mask);
+                        };
+                    
+                        function floodFillWithoutBorders(image, px, py, colorThreshold, mask) {
+                    
+                            var c, x, newY, el, xr, xl, dy, dyl, dyr, checkY,
+                                data = image.data,
+                                w = image.width,
+                                h = image.height,
+                                bytes = image.bytes,
+                                maxX = -1, minX = w + 1, maxY = -1, minY = h + 1,
+                                i = py * w + px, 
+                                result = new Uint8Array(w * h), 
+                                visited = new Uint8Array(mask ? mask : w * h); 
+                    
+                            if (visited[i] === 1) return null;
+                    
+                            i = i * bytes; 
+                            var sampleColor = [data[i], data[i + 1], data[i + 2], data[i + 3]]; 
+                    
+                            var stack = [{ y: py, left: px - 1, right: px + 1, dir: 1 }]; 
+                            do {
+                                el = stack.shift(); 
+                    
+                                checkY = false;
+                                for (x = el.left + 1; x < el.right; x++) {
+                                    dy = el.y * w;
+                                    i = (dy + x) * bytes; 
+                    
+                                    if (visited[dy + x] === 1) continue; 
+                                   
+                                    c = data[i] - sampleColor[0]; 
+                                    if (c > colorThreshold || c < -colorThreshold) continue;
+                                    c = data[i + 1] - sampleColor[1]; 
+                                    if (c > colorThreshold || c < -colorThreshold) continue;
+                                    c = data[i + 2] - sampleColor[2]; 
+                                    if (c > colorThreshold || c < -colorThreshold) continue;
+                    
+                                    checkY = true;  
+                    
+                                    result[dy + x] = 1; 
+                                    visited[dy + x] = 1;
+                    
+                                    xl = x - 1;
+                                    
+                                    while (xl > -1) {
+                                        dyl = dy + xl;
+                                        i = dyl * bytes; 
+                                        if (visited[dyl] === 1) break; 
+                                        
+                                        c = data[i] - sampleColor[0]; 
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                                        c = data[i + 1] - sampleColor[1]; 
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                                        c = data[i + 2] - sampleColor[2]; 
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                    
+                                        result[dyl] = 1;
+                                        visited[dyl] = 1;
+                    
+                                        xl--;
+                                    }
+                                    xr = x + 1;
+                                    
+                                    while (xr < w) {
+                                        dyr = dy + xr;
+                                        i = dyr * bytes; 
+                                        if (visited[dyr] === 1) break; 
+                                        c = data[i] - sampleColor[0]; 
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                                        c = data[i + 1] - sampleColor[1]; 
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                                        c = data[i + 2] - sampleColor[2]; 
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                    
+                                        result[dyr] = 1;
+                                        visited[dyr] = 1;
+                    
+                                        xr++;
+                                    }
+                    
+                                    
+                                    if (xl < minX) minX = xl + 1;
+                                    if (xr > maxX) maxX = xr - 1;
+                    
+                                    newY = el.y - el.dir;
+                                    if (newY >= 0 && newY < h) { 
+                                        if (xl < el.left) stack.push({ y: newY, left: xl, right: el.left, dir: -el.dir }); 
+                                        if (el.right < xr) stack.push({ y: newY, left: el.right, right: xr, dir: -el.dir }); 
+                                    }
+                                    newY = el.y + el.dir;
+                                    if (newY >= 0 && newY < h) { 
+                                        if (xl < xr) stack.push({ y: newY, left: xl, right: xr, dir: el.dir }); 
+                                    }
+                                }
+                                
+                                if (checkY) {
+                                    if (el.y < minY) minY = el.y;
+                                    if (el.y > maxY) maxY = el.y;
+                                }
+                            } while (stack.length > 0);
+                    
+                            return {
+                                data: result,
+                                width: image.width,
+                                height: image.height,
+                                bounds: {
+                                    minX: minX,
+                                    minY: minY,
+                                    maxX: maxX,
+                                    maxY: maxY
+                                }
+                            };
+                        };
+                    
+                        function floodFillWithBorders(image, px, py, colorThreshold, mask) {
+                    
+                            var c, x, newY, el, xr, xl, dy, dyl, dyr, checkY,
+                                data = image.data,
+                                w = image.width,
+                                h = image.height,
+                                bytes = image.bytes, 
+                                maxX = -1, minX = w + 1, maxY = -1, minY = h + 1,
+                                i = py * w + px, 
+                                result = new Uint8Array(w * h), 
+                                visited = new Uint8Array(mask ? mask : w * h); 
+                    
+                            if (visited[i] === 1) return null;
+                    
+                            i = i * bytes; 
+                            var sampleColor = [data[i], data[i + 1], data[i + 2], data[i + 3]]; 
+                    
+                            var stack = [{ y: py, left: px - 1, right: px + 1, dir: 1 }];
+                            do {
+                                el = stack.shift(); 
+                    
+                                checkY = false;
+                                for (x = el.left + 1; x < el.right; x++) {
+                                    dy = el.y * w;
+                                    i = (dy + x) * bytes; 
+                    
+                                    if (visited[dy + x] === 1) continue; 
+                    
+                                    checkY = true;  
+                    
+                                    result[dy + x] = 1; 
+                                    visited[dy + x] = 1; 
+                    
+                                    
+                                    c = data[i] - sampleColor[0]; 
+                                    if (c > colorThreshold || c < -colorThreshold) continue;
+                                    c = data[i + 1] - sampleColor[1]; 
+                                    if (c > colorThreshold || c < -colorThreshold) continue;
+                                    c = data[i + 2] - sampleColor[2]; 
+                                    if (c > colorThreshold || c < -colorThreshold) continue;
+                    
+                                    xl = x - 1;
+                                    
+                                    while (xl > -1) {
+                                        dyl = dy + xl;
+                                        i = dyl * bytes; 
+                                        if (visited[dyl] === 1) break; 
+                    
+                                        result[dyl] = 1;
+                                        visited[dyl] = 1;
+                                        xl--;
+                    
+                                        
+                                        c = data[i] - sampleColor[0]; 
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                                        c = data[i + 1] - sampleColor[1]; 
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                                        c = data[i + 2] - sampleColor[2]; 
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                                    }
+                                    xr = x + 1;
+                                    
+                                    while (xr < w) {
+                                        dyr = dy + xr;
+                                        i = dyr * bytes; 
+                                        if (visited[dyr] === 1) break; 
+                    
+                                        result[dyr] = 1;
+                                        visited[dyr] = 1;
+                                        xr++;
+                    
+                                       
+                                        c = data[i] - sampleColor[0]; 
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                                        c = data[i + 1] - sampleColor[1]; 
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                                        c = data[i + 2] - sampleColor[2];
+                                        if (c > colorThreshold || c < -colorThreshold) break;
+                                    }
+                    
+                                    
+                                    if (xl < minX) minX = xl + 1;
+                                    if (xr > maxX) maxX = xr - 1;
+                    
+                                    newY = el.y - el.dir;
+                                    if (newY >= 0 && newY < h) { 
+                                        if (xl < el.left) stack.push({ y: newY, left: xl, right: el.left, dir: -el.dir }); 
+                                        if (el.right < xr) stack.push({ y: newY, left: el.right, right: xr, dir: -el.dir }); 
+                                    }
+                                    newY = el.y + el.dir;
+                                    if (newY >= 0 && newY < h) { 
+                                        if (xl < xr) stack.push({ y: newY, left: xl, right: xr, dir: el.dir }); 
+                                    }
+                                }
+                                
+                                if (checkY) {
+                                    if (el.y < minY) minY = el.y;
+                                    if (el.y > maxY) maxY = el.y;
+                                }
+                            } while (stack.length > 0);
+                    
+                            return {
+                                data: result,
+                                width: image.width,
+                                height: image.height,
+                                bounds: {
+                                    minX: minX,
+                                    minY: minY,
+                                    maxX: maxX,
+                                    maxY: maxY
+                                }
+                            };
+                        };
+
+ lib.gaussBlur = function(mask, radius) {
+
+        var i, k, k1, x, y, val, start, end,
+            n = radius * 2 + 1, // size of the pattern for radius-neighbors (from -r to +r with the center point)
+            s2 = radius * radius,
+            wg = new Float32Array(n), // weights
+            total = 0, // sum of weights(used for normalization)
+            w = mask.width,
+            h = mask.height,
+            data = mask.data,
+            minX = mask.bounds.minX,
+            maxX = mask.bounds.maxX,
+            minY = mask.bounds.minY,
+            maxY = mask.bounds.maxY;
+
+        // calc gauss weights
+        for (i = 0; i < radius; i++) {
+            var dsq = (radius - i) * (radius - i);
+            var ww = Math.exp(-dsq / (2.0 * s2)) / (2 * Math.PI * s2);
+            wg[radius + i] = wg[radius - i] = ww;
+            total += 2 * ww;
+        }
+        // normalization weights
+        for (i = 0; i < n; i++) {
+            wg[i] /= total;
+        }
+
+        var result = new Uint8Array(w * h), // result mask
+            endX = radius + w,
+            endY = radius + h;
+
+        //walk through all source points for blur
+        for (y = minY; y < maxY + 1; y++)
+            for (x = minX; x < maxX + 1; x++) {
+                val = 0;
+                k = y * w + x; // index of the point
+                start = radius - x > 0 ? radius - x : 0;
+                end = endX - x < n ? endX - x : n; // Math.min((((w - 1) - x) + radius) + 1, n);
+                k1 = k - radius;
+                // walk through x-neighbors
+                for (i = start; i < end; i++) {
+                    val += data[k1 + i] * wg[i];
+                }
+                start = radius - y > 0 ? radius - y : 0;
+                end = endY - y < n ? endY - y : n; // Math.min((((h - 1) - y) + radius) + 1, n);
+                k1 = k - radius * w;
+                // walk through y-neighbors
+                for (i = start; i < end; i++) {
+                    val += data[k1 + i * w] * wg[i];
+                }
+                result[k] = val > 0.5 ? 1 : 0;
+            }
+
+        return {
+            data: result,
+            width: w,
+            height: h,
+            bounds: {
+                minX: minX,
+                minY: minY,
+                maxX: maxX,
+                maxY: maxY
+            }
+        };
+    };
+
+    lib.gaussBlur = function(mask, radius) {
+
+        var i, k, k1, x, y, val, start, end,
+            n = radius * 2 + 1, 
+            s2 = radius * radius,
+            wg = new Float32Array(n), 
+            total = 0, 
+            w = mask.width,
+            h = mask.height,
+            data = mask.data,
+            minX = mask.bounds.minX,
+            maxX = mask.bounds.maxX,
+            minY = mask.bounds.minY,
+            maxY = mask.bounds.maxY;
+
+        
+        for (i = 0; i < radius; i++) {
+            var dsq = (radius - i) * (radius - i);
+            var ww = Math.exp(-dsq / (2.0 * s2)) / (2 * Math.PI * s2);
+            wg[radius + i] = wg[radius - i] = ww;
+            total += 2 * ww;
+        }
+       
+        for (i = 0; i < n; i++) {
+            wg[i] /= total;
+        }
+
+        var result = new Uint8Array(w * h), 
+            endX = radius + w,
+            endY = radius + h;
+
+       
+        for (y = minY; y < maxY + 1; y++)
+            for (x = minX; x < maxX + 1; x++) {
+                val = 0;
+                k = y * w + x; 
+                start = radius - x > 0 ? radius - x : 0;
+                end = endX - x < n ? endX - x : n; 
+                k1 = k - radius;
+                
+                for (i = start; i < end; i++) {
+                    val += data[k1 + i] * wg[i];
+                }
+                start = radius - y > 0 ? radius - y : 0;
+                end = endY - y < n ? endY - y : n; 
+                k1 = k - radius * w;
+                
+                for (i = start; i < end; i++) {
+                    val += data[k1 + i * w] * wg[i];
+                }
+                result[k] = val > 0.5 ? 1 : 0;
+            }
+
+        return {
+            data: result,
+            width: w,
+            height: h,
+            bounds: {
+                minX: minX,
+                minY: minY,
+                maxX: maxX,
+                maxY: maxY
+            }
+        };
+    };
+           
+    
+                         return lib;
+                         
+                    })(); 
+               
+                    var magic = function () {
+                        
+                        if (imageInfo.width>0 && imageInfo.height>0) {
+                          var image = {
+                            data: imageInfo.data,
+                            width: imageInfo.width,
+                            height: imageInfo.height,
+                            bytes: 4
+                          };
+                          mask = MagicWand.floodFill(image, downPoint.x, downPoint.y, thickness,undefined,true);
+                          mask = MagicWand.gaussBlur(mask,5);
+                          
+                          floodFillPoints=mask.data;
+                       
+                          drawInside(1);
+                        
+                        }
+                      };
+
+                     
+
+                    var drawInside = function(selectedIndex)
+                    {
+                      
+                        var points = floodFillPoints;
+                        var x, y,
+                        w = imageInfo.width,
+                        h = imageInfo.height,
+                        ctx = imageInfo.context,
+                        isFirst =true;  
+  
+                        ctx.lineCap="butt";
+                        ctx.lineJoin="mutter";
+                        ctx.lineWidth=1;
+                        ctx.beginPath();
+     
+                        magicPoints.push(floodFillPoints);
+  for(var k=0;k<points.length;k++)
+    {
+      if(points[k]==selectedIndex)
+        {
+           x = k % imageInfo.width;
+          y = k/imageInfo.width;
+        
+          
+          if(isFirst)
+            {
+              ctx.moveTo(x, y);
+              isFirst = false;
+            }
+        
+          ctx.lineTo(x, y);
+         
+          
+        }
+      
+    }
+   
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.stroke();
+  
+  
+  
+
+}
+
+        var canvas = document.getElementById('canvas');
+        var backCanvas = document.createElement('canvas');
+        var backCtx = backCanvas.getContext('2d');
+        
+        var imageInfo = {
+            width: 0,
+            height: 0,
+            context: canvas.getContext("2d")
+          };
+
+        canvas.width = $(document).width()-15;
+        
+        canvas.height = $(document).height()-20;  
+        backCanvas.width = canvas.width;
+        backCanvas.height = canvas.height;
+
+        var ctx = canvas.getContext('2d');
+        
+        var canvasx = $(canvas).offset().left;
+        var canvasy = $(canvas).offset().top;
+        var last_mousex = last_mousey = 0;
+        var mousex = mousey = 0;
+        var mousedown = false;
+        var tooltype = 'erase';
+        var image = new Image();
+        var brushWidth = 10;
+        var context;
+        image.onload = drawImageActualSize;
+        
+        
+    
+
+        document.addEventListener("message", function (event) {
+            
+            
+            if(!isNaN(event.data))
+            {
+               
+                brushWidth = event.data;
+                context.lineWidth = parseInt(event.data);
+            }
+            else if(isJson(event.data))
+            {
+                var messgeObject = JSON.parse(event.data);
+                if(messgeObject.name=='rubber' || messgeObject.name=='magic')
+                {
+
+                    if(messgeObject.name=='rubber')
+                    {
+                    rubberIndex = 0;
+                    brushWidth = parseInt(messgeObject.value);
+                    context.lineWidth = parseInt(messgeObject.value);
+                    }
+                   else if(messgeObject.name=='magic')
+                    {
+                       
+                    rubberIndex = 1;
+                    }
+
+                  
+
+                    thickness = parseInt(messgeObject.value);
+                }
+                else if(messgeObject.name=='organ')
+                {
+                  
+                   var  messgeObjectArray = messgeObject.value;
+                   detectBody(imageForBody,messgeObjectArray);
+                   
+
+                }
+                else if(messgeObject.name=='reset')
+                {
+                  
+                    reset();  
+
+                }
+                else if(messgeObject.name=='undo')
+                {
+                   
+                    undo();
+
+                }
+
+                else if(messgeObject.name=='share')
+                {
+                   
+                    share();
+
+                }
+
+            }
+            else
+            {
+                if(!imageBackup)
+                {
+                    image.src='data:image/jpg;base64,'+event.data;
+                    imageBackup='data:image/jpg;base64,'+event.data;
+                   
+                    imageForBody = 'data:image/jpg;base64,'+event.data;
+                    document.getElementById("myTextarea").value = imageBackup;
+                }
+                else
+                {
+                    var topImage = canvas.toDataURL('image/png');
+                    refreshCanvas('data:image/jpg;base64,'+event.data);
+                    implementImage(topImage);
+                    
+
+                    
+                }
+         
+            }
+         
+        }); 
+        
+		function compressImage (base64) {
+            const canvas1 = document.createElement('canvas1')
+            const img = document.createElement('img')
+          
+            return new Promise((resolve, reject) => {
+              img.onload = function () {
+                let width = img.width
+                let height = img.height
+                const maxHeight = 200
+                const maxWidth = 200
+          
+                if (width > height) {
+                  if (width > maxWidth) {
+                    height = Math.round((height *= maxWidth / width))
+                    width = maxWidth
+                  }
+                } else {
+                  if (height > maxHeight) {
+                    width = Math.round((width *= maxHeight / height))
+                    height = maxHeight
+                  }
+                }
+                canvas1.width = width
+                canvas1.height = height
+          
+                const ctx = canvas1.getContext('2d')
+                ctx.drawImage(img, 0, 0, width, height)
+          
+                resolve(canvas1.toDataURL('image/jpeg', 0.7))
+              }
+              img.onerror = function (err) {
+                reject(err)
+              }
+              img.src = base64
+            })
+          }
+        function initiateListeners()
+        {
+        $('#canvas').on('click', function (e) {
+            if(rubberIndex==1)
+            {
+              
+              var p = $(e.target).offset(),
+                  x = Math.round((e.clientX || e.pageX) - p.left),
+                  y = Math.round((e.clientY || e.pageY) - p.top);    
+              downPoint = { x: x, y: y };    
+              magic();
+             imageHistory.push(canvas.toDataURL('image/png'));
+              
+            }
+            });
+        
+        canvas.addEventListener('touchstart', function (e) {
+         var xyPoints ={};
+
+         rubberPoints = [];         
+        if(rubberIndex==0)
+        {
+            last_mousex = mousex = parseInt(e.touches[0].clientX - canvasx);
+            last_mousey = mousey = parseInt(e.touches[0].clientY - canvasy);
+            xyPoints.x=last_mousex;
+            xyPoints.y=last_mousey;
+            xyPoints.brushWidth = brushWidth;
+            xyPoints.tooltype = tooltype;
+            rubberPoints.push(xyPoints);
+            mousedown = true;
+
+        }
+        });
+        
+        
+        canvas.addEventListener('touchend', function (e) {
+           
+            if(rubberIndex==0)
+            {    
+            mousedown = false;
+            imageHistory.push(canvas.toDataURL('image/png'));
+
+
+            }
+            
+        
+
+        });
+        
+        
+        canvas.addEventListener('touchmove', function (e) {
+            if(rubberIndex==0)
+            {
+                var xyPoints ={};                
+        mousex = parseInt(e.touches[0].clientX - canvasx);
+        mousey = parseInt(e.touches[0].clientY - canvasy);
+        if (mousedown) {
+        context = ctx;
+        ctx.beginPath();
+        if (tooltype == 'draw') {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = brushWidth;
+        } else {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.lineWidth = brushWidth;
+        }
+        ctx.moveTo(last_mousex, last_mousey);
+        xyPoints.x = mousex;
+        xyPoints.y = mousey;
+        xyPoints.brushWidth = brushWidth; 
+        xyPoints.tooltype = tooltype;
+        rubberPoints.push(xyPoints);
+        ctx.lineTo(mousex, mousey);
+        ctx.lineJoin = ctx.lineCap = 'round';
+        ctx.stroke();
+        }
+        last_mousex = mousex;
+        last_mousey = mousey;
+        
+    }
+        });
+    }
+
+        initiateListeners();
+        
+        use_tool = function (tool) {
+          tooltype = tool;
+        }
+        
+        function drawImageActualSize() {
+          
+            imageInfo.width = $(document).width()-10;
+            imageInfo.height = $(document).height()-20;
+            ctx.drawImage(this, 0, 0, this.width, this.height,0,0,$(document).width()-10,$(document).height()-20);
+            imageInfo.data = ctx.getImageData(0, 0, imageInfo.width, imageInfo.height).data;
+            imageBackup=canvas.toDataURL('image/png',0.1);
+           
+            
+          
+
+
+        }
+        function isJson(str) {
+            try {
+                JSON.parse(str);
+            } catch (e) {
+                return false;
+            }
+            return true;
+        }
+
+        function undo()
+        {
+            
+           
+            refreshCanvas(imageBackup);
+            redrawItAll();
+          
+            
+          
+
+        }
+        function share()
+        {
+            window.postMessage(imageBackup);
+
+        }
+
+        function reset()
+        {
+            
+            refreshCanvas(imageBackup);
+          
+          
+
+        }
+
+        function refreshCanvas(imageStr)
+        {
+           
+            $('#canvas').remove();
+            var canvasElement = $('<canvas id="canvas" style="border: 1px solid black; background-color: transparent;"></canvas>');
+            canvasElement.appendTo('body');
+            canvas = document.getElementById('canvas');
+            canvas.width = $(document).width()-15;
+            canvas.height = $(document).height()-20;
+            ctx = canvas.getContext('2d');
+            canvasx = $(canvas).offset().left;
+            canvasy = $(canvas).offset().top; 
+            imageInfo.context = ctx;
+            initiateListeners();
+            if(imageStr)
+            implementImage(imageStr);
+
+        }
+		function compressImage (base64) {
+            const canvas1 = document.createElement('canvas1')
+            const img = document.createElement('img')
+          
+            return new Promise((resolve, reject) => {
+              img.onload = function () {
+                let width = img.width
+                let height = img.height
+                const maxHeight = 200
+                const maxWidth = 200
+          
+                if (width > height) {
+                  if (width > maxWidth) {
+                    height = Math.round((height *= maxWidth / width))
+                    width = maxWidth
+                  }
+                } else {
+                  if (height > maxHeight) {
+                    width = Math.round((width *= maxHeight / height))
+                    height = maxHeight
+                  }
+                }
+                canvas1.width = width
+                canvas1.height = height
+          
+                const ctx = canvas1.getContext('2d')
+                ctx.drawImage(img, 0, 0, width, height)
+          
+                resolve(canvas1.toDataURL('image/jpeg', 0.1))
+              }
+              img.onerror = function (err) {
+                reject(err)
+              }
+              img.src = base64
+            })
+          }
+        function detectBody(imageStr,bodypartArray)
+        {
+            $("#coverScreen").show();
+           
+            $('#canvas').remove();
+            var canvasElement = $('<canvas id="canvas" style="border: 1px solid black; background-color: transparent;"></canvas>');
+            canvasElement.appendTo('body');
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+            canvasx = $(canvas).offset().left;
+            canvasy = $(canvas).offset().top; 
+            imageInfo.context = ctx;
+            initiateListeners();
+            var imageCopy = new Image()
+            
+            imageCopy.src = imageStr;
+         
+            imageCopy.onload = async function(){
+               
+			const net = await bodyPix.load();
+			const partSegmentation = await net.segmentPersonParts(this, {
+            flipHorizontal: false,
+            internalResolution: 'medium',
+            segmentationThreshold: 0.7});
+			const backgroundBlurAmount = 3;
+			const edgeBlurAmount = 3;
+			const flipHorizontal = false;
+			const faceBodyPartIdsToBlur = [12,2,3,4,5];
+		    bodyPix.blurBodyPart(canvas, this, partSegmentation, bodypartArray,backgroundBlurAmount, edgeBlurAmount, flipHorizontal);
+            refreshCanvas(imagedata_to_image(canvas.getContext("2d").getImageData(0,0,this.width,this.height)));
+            $("#coverScreen").hide();
+        };
+
+          
+
+        }
+        function imagedata_to_image(imagedata) {
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            canvas.width = imagedata.width;
+            canvas.height = imagedata.height; 
+            ctx.putImageData(imagedata, 0, 0);
+        
+           
+            return  canvas.toDataURL();
+        }
+
+        function implementImage(imageStr)
+        {
+            var imageB = new Image();
+            imageB.src = imageStr;
+            imageB.onload = drawImageActualSize;
+            
+
+        }
+
+        function redrawItAll()
+        {
+           
+            
+            if(imageHistory.length>0)
+                refreshCanvas(imageHistory[imageHistory.length-2]);
+
+        }
+
+        async function loadAndPredict(image) {
+          
+            
+            const net = await bodyPix.load();
+            
+            if(net)
+            $("#title").text("loadandpredict");
+            const segmentation = await net.segmentPersonParts(image, {
+            flipHorizontal: false,
+            internalResolution: 'medium',
+            segmentationThreshold: 0.7
+      });
+            $("#title").text("loadandpredict");
+            lastPrediction = segmentation;
+
+            
+          }
+
+        function  redrawRubber()
+        {
+            rubberPointsOverAll = rubberPointsOverAll.pop()
+            if(rubberPointsOverAll.length>0)
+            for(var j=0;j<rubberPointsOverAll.length;j++)
+        {
+            var rubberPoints=rubberPointsOverAll[j];
+            for(var i=0;i<rubberPoints.length;i++)
+        {
+            if(i==0)
+            {
+                last_mousex = rubberPoints[i].x;
+                last_mousey = rubberPoints[i].y;
+
+            }
+
+    else{
+            mousex = rubberPoints[i].x;
+            mousey = rubberPoints[i].y;
+            tooltype = rubberPoints[i].tooltype;
+            brushWidth = rubberPoints[i].brushWidth;
+            context = ctx;
+            ctx.beginPath();
+            if (tooltype == 'draw') {
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = brushWidth;
+            } else {
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.lineWidth = brushWidth;
+            }
+            ctx.moveTo(last_mousex, last_mousey);
+          
+            ctx.lineTo(mousex, mousey);
+            ctx.lineJoin = ctx.lineCap = 'round';
+            ctx.stroke();
+            last_mousex = mousex;
+            last_mousey = mousey;
+            }
+            
+
+        }   
+        }
+
+        }
+
+
+        }());
+            </script>
+        </body>
+        
+        </html>

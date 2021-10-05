@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Dresser",
+    "slug": "rn-dresser",
+    "privacy": "public",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "version": "1.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.fivesquare.trialcam",
+      "buildNumber": "1.0.1",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses camera to capture any person picture to edit so that we can trial any dress on the edited picture",
+        "NSPhotoLibraryUsageDescription": "This app uses the photos to edit so that we can trial any dress on the edited picture"
+      }
+    }
+  }
+}
